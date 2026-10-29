@@ -1,0 +1,18 @@
+// Gradle init script：全局注入国内镜像（仓库排在项目仓库之前，dl.google.com 永不被请求）
+// 用法：gradlew assembleDebug --init-script init-mirror.gradle
+
+allprojects {
+    buildscript {
+        repositories {
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/public' }
+            maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+            maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        }
+    }
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+    }
+}
