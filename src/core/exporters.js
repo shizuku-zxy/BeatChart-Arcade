@@ -1,7 +1,9 @@
 // ============ 导出：chart.json / 分析 CSV / MIDI 节奏轨 ============
 
 import { APP_NAME, APP_VERSION, DIFFICULTIES } from './constants.js';
-import { exportBytes } from './store.js';
+import { buildOsuChart } from './chartformats.js';
+import { zipStore } from './zip.js';
+import { exportBytes, loadAudioBlob } from './store.js';
 
 /** 单档 chart.json（metadata + analysis 摘要 + notes；customChart 传入时导出自定谱） */
 export function buildChartJson(song, diffKey, customChart) {
@@ -145,6 +147,41 @@ export async function exportAnalysisCsv(song) {
 }
 export async function exportMidi(song, diffKey) {
   return exportBytes(`${safeName(song.title)}[${diffKey}].mid`, buildMidi(song, diffKey));
+}
+
+/** 导出可直接再导入的 .osz 谱面包（4K chart.osu + 原音频） */
+export async function exportChartPackage(song, diffKey, customChart) {
+  const chart = customChart || (song.charts && song.charts[diffKey]);
+  if (!chart || !Array.isArray(chart.notes)) throw new Error('找不到谱面数据，无法导出谱面包');
+  const ab = await loadAudioBlob(song.id, song.ext);
+  if (!ab) throw new Error('找不到音频文件，无法导出谱面包');
+
+  const ext = String(song.ext || 'mp3')
+    .toLowerCase()
+    .replace(/^\.+/, '')
+    .replace(/[^a-z0-9]/g, '') || 'mp3';
+  const audioFile = `audio.${ext}`;
+  const osuText = buildOsuChart(chart, {
+    title: song.title,
+    bpm: song.analysis && song.analysis.bpm,
+    offset: (song.analysis && song.analysis.offset) || 0,
+    version: customChart ? customChart.name : `BeatChart ${diffKey}`,
+    audioFile,
+    keyCount: song.keyCount || 4,
+  });
+  const zipData = zipStore([
+    { name: audioFile, data: new Uint8Array(ab) },
+    { name: 'chart.osu', data: new TextEncoder().encode(osuText) },
+  ]);
+  const tag = customChart ? safeTag(customChart.name) : (diffKey || 'chart');
+  return exportBytes(`${safeName(song.title)}[${tag}].osz`, zipData);
+}
+
+function safeTag(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\[\]\/\\:*?"<>|\s]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 24) || 'chart';
 }
 
 function safeName(s) {

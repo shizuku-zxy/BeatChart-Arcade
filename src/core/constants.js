@@ -1,7 +1,7 @@
 // ============ BeatChart Arcade 全局常量 ============
 
 export const APP_NAME = 'BeatChart Arcade';
-export const APP_VERSION = '1.8.1';
+export const APP_VERSION = '1.8.2';
 
 // 三档难度参数（生成器输入）
 export const DIFFICULTIES = {

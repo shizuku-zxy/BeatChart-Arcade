@@ -4,9 +4,9 @@
 
 ## 下载即玩
 
-- **Windows 便携版**：[BeatChartArcade-Portable-1.8.1.exe](https://github.com/shizuku-zxy/BeatChart-Arcade/releases/download/v1.8.1/BeatChartArcade-Portable-1.8.1.exe)
+- **Windows 便携版**：[BeatChartArcade-Portable-1.8.2.exe](https://github.com/shizuku-zxy/BeatChart-Arcade/releases/download/v1.8.2/BeatChartArcade-Portable-1.8.2.exe)
   - 双击即运行，无需安装任何运行时、无需联网；数据存在 exe 同目录 `BeatChartData/`，整个文件夹拷 U 盘即随身携带。
-- **Android 版（APK）**：[BeatChartArcade-Android-1.8.1.apk](https://github.com/shizuku-zxy/BeatChart-Arcade/releases/download/v1.8.1/BeatChartArcade-Android-1.8.1.apk)
+- **Android 版（APK）**：[BeatChartArcade-Android-1.8.2.apk](https://github.com/shizuku-zxy/BeatChart-Arcade/releases/download/v1.8.2/BeatChartArcade-Android-1.8.2.apk)
   - 传到手机安装（需允许“未知来源/安装未知应用”），完全离线；
   - **锁定横屏**，默认透视式玩法（音符从远端飞向判定线，触摸点轨道列击打；设置可切下落式）；
   - v1.5.0 起自动补偿音频输出延迟，若仍觉手感偏移请用设置 → 🎯 触屏与延迟校准；
@@ -21,13 +21,21 @@
 - **音频**：拖拽（支持批量）或「导入音频文件」→ 自动分析 + 生成三档；
 - **谱面包**（.osz/.mcz，含音频）：拖入窗口或曲库页「导入谱面包」→ 解包新建歌曲；
 - **单谱面**（.osu/.mc/.sm/.ssc）：选曲页「导入谱面」挂到该歌（需音频已在库）；
-- **手录**：选曲页「新建手录谱」→ 选起点（空白谱 / E/H/EX / 自定谱底稿）→ 放音乐点击录入；可慢放三档、可拖时间轴回退（回退区标灰、重录同刻自动替换）、录制/编辑双模式随时切换；
+- **手录**：选曲页「新建手录谱」→ 选起点（空白 / E/H/EX / 自定谱）→ 选底谱用法（默认「仅参考」：灰色显示、不写入保存结果；「一并录入」才会继承底谱音符）→ 放音乐点击录入。暂停即进入编辑：底部时间轴自动出现，拖动定位、点音符或时间轴标记删除；慢放/吸附/撤销/清尾都在暂停菜单「设置」里；录完可直接导出 .osz 谱面包；
 - **Android**：同上（系统文件选择器）。
 
 导入后自动走完「分析 → 三档谱面生成」并直接跳到选曲页，选难度即可开玩。
 
 ## 更新记录
 
+- **v1.8.2**（2026-10-29）手录页简化 + 谱面包导出 + 左上角闪烁修复
+  - **修复录歌时左上角一闪一闪的黄色音符**：根因是每次重建可见列表时新建的 Pixi 精灵默认坐标在 `(0,0)`，在下一帧 `render()` 写入正确坐标前被渲染了一帧；现在新建精灵先隐藏、并把「同步可见列表」放到渲染之前，同时销毁旧贴图避免长时间录制显存增长；
+  - **新增可交换谱面包导出**：手录谱、导入谱与算法生成的 E/H/EX 都能导出 `.osz`（原音频 + 4K `chart.osu`，零新增依赖的 ZIP STORE 写出），本软件可直接再导入，方便用户互相交换谱面；导出按钮在选曲页各谱面卡片与手录保存结果页；
+  - **底谱用法可选**：手录起点弹窗新增「仅参考（默认）/ 一并录入」；仅参考时底谱以灰色显示、不写入保存结果；选一并录入才作为已录音符继承（可删除）；
+  - **移除独立编辑模式，暂停即编辑**：录制页顶部只保留「暂停」；继续录制 / 保存 / 设置 / 退出收进暂停菜单；慢放、十六分吸附、撤销、从此处重录、清除后续移入暂停菜单的「设置」；
+  - **暂停自动出现底部时间轴**：拖动定位（含回退标灰），点画面中的音符或时间轴上的音符标记即可删除（Ctrl+Z 撤销）；底谱参考音符不可删除；
+  - **修复安卓时间轴拖动**：canvas/容器 `touch-action:none` + pointer capture + window 级 pointermove/pointerup/pointercancel 兜底，拖出边界或被打断也能正确落点；
+  - 测试 264 项全绿；Electron 冒烟 0 退出。
 - **v1.8.1**（2026-10-28）结算 GO 字样修复 + 流速收敛 + v3 回退移除
   - **修复「打完歌结算时莫名冒出 GO」**（根因：`onFinish` 里 `player.stop()` 把时间锚重置为 0，渲染循环在 900ms 结算延迟内继续跑 → `render(0)` 命中倒计时分支的 GO 帧——桌面端延迟小恰显示 GO，Android 端会闪"准备"或数字）：改为 `player.pause()`，停声且时间锚定在结束位置（>0.6s 不触发倒计时分支）；
   - **透视式流速收敛**：深度插值幂指数 0.62 → 0.50（落点/远端视觉速度比 33× → 27×，"先慢后快"感收一档但仍保留加速冲，非完全匀速——完全匀速会失去纵深感且与透视几何冲突）；渲染上限 8K → 15K 同步扩大，note 仍恰从屏幕顶淡入出现（否则 8K 处会在屏内 17% 高度凭空闪现）；手录页渲染窗口同步；
@@ -231,9 +239,9 @@
 
 ```bash
 npm install          # 安装依赖（含 Electron 二进制）
-npm test             # 核心逻辑自动化测试（245 项断言：分析/分轨/调性/结构/生成/键型/判定/种子/设置/导入导出）
+npm test             # 核心逻辑自动化测试（264 项断言：分析/分轨/调性/结构/生成/键型/判定/种子/设置/导入导出/.osz 包）
 npm run dev:electron # 构建前端并以 Electron 启动（本地开发运行）
-npm run dist         # 打包 Windows 便携版 → release/BeatChartArcade-Portable-1.8.1.exe
+npm run dist         # 打包 Windows 便携版 → release/BeatChartArcade-Portable-1.8.2.exe
 ```
 
 **Android APK 构建**（Windows 上即可，无需 Mac）：
@@ -271,14 +279,14 @@ src/core/
   chartgen.js           谱面生成器 v4：slot 骨架 → 小节分组 → 键型库（flow/stair/trill/jack/chord/
                         mirror/roll）→ onset 落点吸附 → hold 转换 → 人类可行性硬校验（mulberry32 可复现）
   chartedit.js          保留段重抽拼接、接缝清理、同手区长键冲突清理（纯函数）
-  chartformats.js       osu!mania / Malody / StepMania 谱面解析
-  zip.js                .osz/.mcz 零依赖 zip 解包（DecompressionStream）
+  chartformats.js       osu!mania / Malody / StepMania 解析；buildOsuChart 生成可再导入的 4K .osu
+  zip.js                .osz/.mcz 零依赖 zip 读写（读：DecompressionStream；写：STORE + CRC32）
   timeutil.js           音乐时间换算（慢放/变速/回退）与透视曲线纯函数
   audio.js              decodeAudioData 调度、SongPlayer（AudioContext.currentTime 主时钟、变速/seek/暂停）
   store.js              状态管理 + 持久化（Electron IPC → IndexedDB → localStorage 三级兑底）
   idb.js                IndexedDB 存储层（Android/浏览器环境的音频与库数据）
   importer.js           导入流水线（音频 / 谱面包 / 单谱面）
-  exporters.js          chart.json / CSV / MIDI(SMF) 导出
+  exporters.js          chart.json / CSV / MIDI(SMF) / .osz 谱面包（原音频 + chart.osu）导出
   upgrade.js            旧版分析后台升级队列（v4，seed 保留、旧谱可回退）
 src/game/
   Engine.js             判定引擎（tap/hold、四判定、连击、分数、准确率）
@@ -288,7 +296,7 @@ src/screens/            Library / Song / Game / Result / Settings / MusicAxis / 
 android/                Capacitor Android 工程（横屏锁定、Gradle 镜像、WebView 壳；
                         Gradle 8.2.1 + AGP 8.2.1 + compileSdk 34）
 scripts/verify-dist.mjs 构建防呆：dist 必须新于源码，避免旧前端被打进 exe
-tests/test-core.mjs     核心逻辑回归测试（Node 环境，245 项断言）
+tests/test-core.mjs     核心逻辑回归测试（Node 环境，264 项断言）
 ```
 
 **时钟方案**：游玩主时钟严格使用 `AudioContext.currentTime`（硬件音频时钟），渲染循环仅采样该值而不做任何累加，因此长时间游玩零漂移；暂停通过 `ctx.suspend()` 冻结时钟实现。

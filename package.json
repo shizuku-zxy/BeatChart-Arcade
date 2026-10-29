@@ -1,6 +1,6 @@
 {
   "name": "beatchart-arcade",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "BeatChart Arcade — 本地离线自动谱面音游（导入音频 → 自动分析 → E/H/EX 三档谱面 → 游玩）",
   "main": "electron/main.js",
   "author": "TeleAgent",

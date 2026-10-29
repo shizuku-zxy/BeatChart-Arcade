@@ -8,7 +8,7 @@
 //   .mc   → beat(拍) × TIME 段 BPM 积分成秒
 //   .sm/.ssc → 同 .mc（#BPMS/#OFFSET），OFFSET 按社区通行解释为秒、与拍 0 的时间差
 
-const AUDIO_EXTS = ['mp3', 'ogg', 'wav', 'flac', 'm4a', 'opus', 'aac', 'oga'];
+const AUDIO_EXTS = ['mp3', 'ogg', 'wav', 'flac', 'm4a', 'opus', 'aac', 'oga', 'webm'];
 
 // ---------- 通用工具 ----------
 
@@ -129,6 +129,102 @@ export function parseOsu(text) {
       noteCount: notes.length,
     }],
   };
+}
+
+// ---------- 写出 .osu（osu!mania 4K，用于 .osz 谱面包交换） ----------
+
+/**
+ * 生成 osu!mania 4K 谱面文本（osu file format v14）。
+ * 纯函数：不读取音频、不依赖浏览器；notes 时间单位秒，输出毫秒。
+ * @param {{notes:Array<{t:number,lane:number,type:'tap'|'hold',d?:number}>}} chart
+ * @param {{title:string,artist?:string,bpm:number,offset?:number,version:string,audioFile?:string,keyCount?:number}} meta
+ * @returns {string}
+ */
+export function buildOsuChart(chart, meta) {
+  const m = meta || {};
+  const oneLine = (v) => String(v == null ? '' : v).replace(/[\r\n]+/g, ' ').trim();
+  const title = oneLine(m.title) || 'Untitled';
+  const artist = oneLine(m.artist) || 'Unknown';
+  const version = oneLine(m.version) || 'BeatChart';
+  const audioFile = oneLine(m.audioFile) || 'audio.mp3';
+  const bpmNum = Number(m.bpm);
+  const bpm = Number.isFinite(bpmNum) && bpmNum > 0 ? bpmNum : 120;
+  const offsetNum = Number(m.offset);
+  const offsetMs = Math.round((Number.isFinite(offsetNum) ? offsetNum : 0) * 1000);
+
+  // 仅接受能原样被 parseOsu 读回的 4K 音符；输出前按时间排序
+  const hitObjects = (Array.isArray(chart && chart.notes) ? chart.notes : [])
+    .filter((n) => n && Number.isFinite(n.t) && n.t >= 0
+      && Number.isInteger(n.lane) && n.lane >= 0 && n.lane < 4)
+    .slice()
+    .sort((a, b) => a.t - b.t)
+    .map((n) => {
+      const x = Math.floor((n.lane + 0.5) * 512 / 4);
+      const time = Math.round(n.t * 1000);
+      if (n.type === 'hold') {
+        const d = Number.isFinite(n.d) && n.d > 0 ? n.d : 0;
+        const endTime = Math.max(time + 1, Math.round((n.t + d) * 1000));
+        return `${x},192,${time},128,0,${endTime}:0:0:0:0`;
+      }
+      return `${x},192,${time},1,0,0:0:0:0:`;
+    });
+
+  return [
+    'osu file format v14',
+    '',
+    '[General]',
+    `AudioFilename: ${audioFile}`,
+    'AudioLeadIn: 0',
+    'PreviewTime: -1',
+    'Countdown: 0',
+    'SampleSet: Normal',
+    'StackLeniency: 0.7',
+    'Mode: 3',
+    'LetterboxInBreaks: 0',
+    'SpecialStyle: 0',
+    'WidescreenStoryboard: 0',
+    '',
+    '[Editor]',
+    'DistanceSpacing: 1',
+    'BeatDivisor: 4',
+    'GridSize: 4',
+    'TimelineZoom: 1',
+    '',
+    '[Metadata]',
+    `Title:${title}`,
+    `TitleUnicode:${title}`,
+    `Artist:${artist}`,
+    `ArtistUnicode:${artist}`,
+    'Creator:BeatChart Arcade',
+    `Version:${version}`,
+    'Source:',
+    'Tags:BeatChart Arcade',
+    'BeatmapID:0',
+    'BeatmapSetID:-1',
+    '',
+    '[Difficulty]',
+    'HPDrainRate:7',
+    'CircleSize:4',
+    'OverallDifficulty:8',
+    'ApproachRate:5',
+    'SliderMultiplier:1.4',
+    'SliderTickRate:1',
+    '',
+    '[Events]',
+    '//Background and Video events',
+    '//Break Periods',
+    '//Storyboard Layer 0 (Background)',
+    '//Storyboard Layer 1 (Fail)',
+    '//Storyboard Layer 2 (Pass)',
+    '//Storyboard Layer 3 (Foreground)',
+    '//Storyboard Sound Samples',
+    '',
+    '[TimingPoints]',
+    `${offsetMs},${60000 / bpm},4,2,0,60,1,0`,
+    '',
+    '[HitObjects]',
+    ...hitObjects,
+  ].join('\n');
 }
 
 // ---------- 拍 → 秒积分器（.sm/.ssc/.mc 共用） ----------

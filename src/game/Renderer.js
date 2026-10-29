@@ -179,6 +179,21 @@ export class GameRenderer {
     // v1.5.0：顶部误差条（最近判定的早晚偏移，早←0→晚）
     this.offsetBar = new PIXI.Graphics();
     hud.addChild(this.offsetBar);
+
+    this._applyHudVisibility();
+  }
+
+  /** 手录页用：隐藏游玩 HUD（分数/准确率/误差条/进度条），保留歌名与倒计时。 */
+  setCleanHud(clean) {
+    this.cleanHud = !!clean;
+    this._applyHudVisibility();
+  }
+
+  _applyHudVisibility() {
+    const v = !this.cleanHud;
+    for (const el of [this.scoreText, this.accText, this.offsetBar, this.progBar]) {
+      if (el) el.visible = v;
+    }
   }
 
   /** 轨道底色 + 边框（下落式：竖直条纹；透视式子类覆写为汇聚梯形） */
@@ -231,8 +246,16 @@ export class GameRenderer {
     g.endFill();
     return this.app.renderer.generateTexture(g);
   }
+  _disposeNoteTextures() {
+    for (const key of ['tapTex', 'tapTexWhite', 'tapTexGray']) {
+      const tex = this[key];
+      if (tex) { try { tex.destroy(true); } catch (e) { /* noop */ } this[key] = null; }
+    }
+  }
+
   _buildNotes(notes) {
     clearLayer(this.noteLayer);
+    this._disposeNoteTextures();
     this.tapTex = this._makeTapTexture(this.diffColor);
     this.tapTexWhite = this._makeTapTexture(0xffffff);
     this.tapTexGray = this._makeTapTexture(NOTE_GRAY);
@@ -246,15 +269,44 @@ export class GameRenderer {
         const tail = new PIXI.Sprite(this.tapTex);
         tail.anchor.set(0.5, 0.5);
         tail.scale.set(0.72);
+        // 新建精灵先隐藏：等下一次 render(time) 写入坐标后再显示。
+        // 否则 PIXI ticker 会先把它们画在默认 (0,0)——手录页每次重建可见列表
+        // 都会在左上角闪一下黄色音符（v1.8.2 修复）。
+        head.visible = false; tail.visible = false; body.visible = false;
         this.noteLayer.addChild(body, head, tail);
         this.sprites.push({ note: n, head, body, tail, gray: !!n.gray });
       } else {
         const s = new PIXI.Sprite(this.tapTex);
         s.anchor.set(0.5, 0.5);
+        s.visible = false;
         this.noteLayer.addChild(s);
         this.sprites.push({ note: n, head: s, gray: !!n.gray });
       }
     }
+  }
+
+  /**
+   * 点选音符（手录页暂停编辑用）：返回命中的 note 对象，未命中返回 null。
+   * 头/尾按精灵实际缩放后的包围盒判定；hold 身体用 getBounds() 判定。
+   */
+  hitNote(x, y) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    for (let i = this.sprites.length - 1; i >= 0; i--) {
+      const sp = this.sprites[i];
+      const n = sp.note;
+      if (!n) continue;
+      for (const part of [sp.head, sp.tail]) {
+        if (!part || !part.visible) continue;
+        const hw = Math.max(16, Math.abs(part.width) * 0.55);
+        const hh = Math.max(14, Math.abs(part.height) * 0.8);
+        if (Math.abs(x - part.x) <= hw && Math.abs(y - part.y) <= hh) return n;
+      }
+      if (sp.body && sp.body.visible && typeof sp.body.getBounds === 'function') {
+        const b = sp.body.getBounds();
+        if (x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height) return n;
+      }
+    }
+    return null;
   }
 
   // ---------- 交互反馈 ----------
@@ -410,8 +462,10 @@ export class GameRenderer {
       // ---- tap：判定/漏掉即消失（v1.5.0 打击感） ----
       if (state !== 'pending') { head.visible = false; return; }
       const y = judgeY - dt * pixelsPerSec;
+      head.texture = sp.gray ? this.tapTexGray : this.tapTex;
       head.x = fieldX + (n.lane + 0.5) * laneW;
       head.y = y;
+      head.alpha = 1;
       head.visible = y > -40 && dt > -0.16;
       return;
     }

@@ -1145,5 +1145,78 @@ console.log('▶ 谱面格式解析测试');
   assert(mDirty.length === 6, `保留段重抽输出：数量正确（${mDirty.length}）`);
 }
 
+// ---- v1.8.1：.osz 谱面包导出（buildOsuChart + zipStore） ----
+console.log('▶ .osz 谱面包导出测试');
+{
+  const { buildOsuChart, parseOsu } = await import(srcUrl('../src/core/chartformats.js'));
+  const { zipStore, unzipFiles, bytesToText } = await import(srcUrl('../src/core/zip.js'));
+
+  const chart = {
+    notes: [
+      { t: 1.25, lane: 1, type: 'hold', d: 0.625 },  // 故意乱序，验证输出排序
+      { t: 0.123, lane: 0, type: 'tap' },
+      { t: 2.501, lane: 3, type: 'tap' },
+      { t: 1.888, lane: 2, type: 'hold', d: 0.5 },
+    ],
+  };
+  const meta = {
+    title: '中文测试谱面',
+    artist: '测试作者',
+    bpm: 174,
+    offset: 0.123,
+    version: 'EX 测试',
+    audioFile: 'audio.mp3',
+    keyCount: 4,
+  };
+  const osuText = buildOsuChart(chart, meta);
+  assert(osuText.startsWith('osu file format v14'), 'buildOsuChart：输出 osu v14 文件头');
+  assert(osuText.includes('Mode: 3') && osuText.includes('CircleSize:4'), 'buildOsuChart：osu!mania 4K 配置');
+  assert(osuText.includes('AudioFilename: audio.mp3') && osuText.includes('Creator:BeatChart Arcade'), 'buildOsuChart：音频文件名与 Creator');
+  assert(osuText.includes('Title:中文测试谱面') && osuText.includes('Version:EX 测试'), 'buildOsuChart：中文标题与难度名');
+  assert(osuText.includes('\n123,') && osuText.includes(',4,2,0,60,1,0'), 'buildOsuChart：offset 毫秒与 uninherited timing 行');
+
+  const parsed = parseOsu(osuText);
+  const pn = parsed.charts[0].notes;
+  const expected = [...chart.notes].sort((a, b) => a.t - b.t);
+  assert(pn.length === expected.length, `buildOsuChart → parseOsu：音符数一致（${pn.length}/${expected.length}）`);
+  assert(pn.every((n, i) => n.lane === expected[i].lane && n.type === expected[i].type), 'buildOsuChart → parseOsu：lane 与 type 一致');
+  assert(pn.every((n, i) => Math.abs(n.t - expected[i].t) <= 0.002), 'buildOsuChart → parseOsu：时间误差 ≤2ms');
+  const parsedHolds = pn.filter((n) => n.type === 'hold');
+  const expectedHolds = expected.filter((n) => n.type === 'hold');
+  assert(parsedHolds.length === expectedHolds.length
+    && parsedHolds.every((h, i) => Math.abs(h.d - expectedHolds[i].d) <= 0.002), 'buildOsuChart → parseOsu：hold 时长误差 ≤2ms');
+  assert(parsed.meta.title === '中文测试谱面' && parsed.meta.artist === '测试作者', 'buildOsuChart → parseOsu：元数据标题/作者');
+  assert(parsed.meta.bpm === 174 && parsed.meta.audioFile === 'audio.mp3', 'buildOsuChart → parseOsu：BPM/音频文件名');
+
+  // 非法 BPM 回退、缺省作者、换行清洗、空谱面文本
+  const fallbackText = buildOsuChart({ notes: [{ t: 0.5, lane: 0, type: 'tap' }] }, {
+    title: '回退\n标题\r', version: 'Easy\n测试', bpm: 0, offset: 0,
+  });
+  const fallback = parseOsu(fallbackText);
+  assert(fallback.meta.bpm === 120 && fallback.meta.artist === 'Unknown', 'buildOsuChart：非法 BPM 回退 120、作者缺省 Unknown');
+  assert(fallbackText.includes('Title:回退 标题') && fallbackText.includes('Version:Easy 测试'), 'buildOsuChart：标题/难度名去除换行');
+  const emptyText = buildOsuChart({ notes: [] }, { title: '空谱', bpm: 120, version: 'Empty' });
+  const emptyTail = emptyText.slice(emptyText.indexOf('[HitObjects]') + '[HitObjects]'.length).trim();
+  assert(emptyTail === '', 'buildOsuChart：空谱面仍可生成（HitObjects 为空）');
+
+  // ZIP STORE 写出 → 切出精确 ArrayBuffer → 现有 unzipFiles 读回
+  const audioBytes = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x7F, 0x80, 0xFF, 0x00, 0x01, 0x02]);
+  const chartBytes = new TextEncoder().encode(osuText);
+  const zip = zipStore([
+    { name: 'audio.mp3', data: audioBytes },
+    { name: 'chart.osu', data: chartBytes },
+  ]);
+  assert(zip instanceof Uint8Array && zip.length > audioBytes.length + chartBytes.length, 'zipStore：返回完整 Uint8Array');
+  assert(zip[0] === 0x50 && zip[1] === 0x4B && zip[2] === 0x03 && zip[3] === 0x04, 'zipStore：local file header 签名正确');
+  const zipBuf = zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength);
+  const files = await unzipFiles(zipBuf, ['mp3', 'osu']);
+  const audioBack = files.find((f) => f.name === 'audio.mp3');
+  const chartBack = files.find((f) => f.name === 'chart.osu');
+  assert(files.length === 2 && !!audioBack && !!chartBack, 'zipStore → unzipFiles：两个文件名读回一致');
+  const sameBytes = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);
+  assert(sameBytes(audioBack && audioBack.data, audioBytes), 'zipStore → unzipFiles：音频字节内容一致');
+  assert(chartBack && bytesToText(chartBack.data) === osuText, 'zipStore → unzipFiles：chart.osu 文本内容一致');
+}
+
 console.log(`\n========== 测试结果：${pass} 通过 / ${fail} 失败 ==========`);
 process.exit(fail > 0 ? 1 : 0);

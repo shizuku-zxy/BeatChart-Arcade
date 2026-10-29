@@ -140,7 +140,7 @@ body {
 }
 .seed-input:focus { outline: none; border-color: #6ec3ff; }
 .diff-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.diff-exports { display: flex; gap: 8px; }
+.diff-exports { display: flex; gap: 8px; flex-wrap: wrap; }
 .toast {
   position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
   padding: 10px 22px; font-size: 13.5px; z-index: 60; color: #cfe6ff;
@@ -255,12 +255,7 @@ html.mobile .more-panel { margin: 0 14px 10px; padding: 10px 12px; }
 }
 html.mobile .upgrade-banner { margin: 6px 14px 0; padding: 6px 12px; font-size: 12px; }
 
-/* ---------- 录入页 / 自定谱 ---------- */
-.rec-toolbar {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-  z-index: 25; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 8px 14px; max-width: 94%;
-}
+/* ---------- 录入页 / 自定谱（v1.8.2：录制 + 暂停编辑） ---------- */
 .rec-snap { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #9db8d8; cursor: pointer; }
 .rec-snap input { accent-color: #6ec3ff; }
 .rec-report { flex-direction: column; gap: 12px; padding: 28px 40px; max-width: 560px; }
@@ -271,34 +266,62 @@ html.mobile .upgrade-banner { margin: 6px 14px 0; padding: 6px 12px; font-size: 
 .custom-card { border-color: rgba(255, 215, 110, 0.35) !important; }
 .edit-panel { flex-wrap: wrap; }
 
-/* v1.7.0：底部时间轴滑块（拖动定位/回退；拖动时自动暂停） */
-.rec-timeline {
-  position: absolute; left: 50%; transform: translateX(-50%); bottom: 12px;
-  z-index: 24; padding: 4px 12px; max-width: 94%;
-  cursor: pointer; touch-action: none;
-}
-.rec-timeline canvas { display: block; }
-/* v1.7.0：起点选择（空白 / E/H/EX / 自定谱底稿） */
-.rec-start { flex-direction: column; gap: 14px; padding: 26px 34px; max-width: 640px; }
+/* 起点选择（空白 / E/H/EX / 自定谱底稿；底谱默认仅参考） */
+.rec-start { flex-direction: column; gap: 14px; padding: 26px 34px; max-width: 680px; }
 .rec-start h2 { font-size: 22px; }
 .rec-start-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-/* v1.7.0：录制页编辑模式（时间轴编辑器，交互与音乐轴一致） */
-.rec-editor {
-  position: absolute; left: 50%; transform: translateX(-50%); bottom: 72px;
-  z-index: 26; display: flex; flex-direction: column; gap: 8px;
-  padding: 10px 14px; max-width: 94%;
-}
-.rec-editor-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.rec-editor-canvas { touch-action: none; }
-.rec-editor-canvas canvas { display: block; cursor: pointer; }
-.rec-editor-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.rec-editor-tip { padding: 2px 0; }
+.rec-mode-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.rec-mode-hint { max-width: 540px; text-align: center; line-height: 1.6; }
 
-html.mobile .rec-toolbar { top: 6px; padding: 6px 10px; gap: 6px; max-width: 96%; }
-html.mobile .rec-toolbar .btn { padding: 4px 8px; font-size: 12px; }
-html.mobile .rec-timeline { bottom: 8px; padding: 2px 8px; }
-html.mobile .rec-editor { bottom: 56px; padding: 8px 10px; }
+/* 准备录制 */
+.rec-ready { width: min(520px, 92vw); padding: 24px 30px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
+.rec-ready h2 { font-size: 22px; }
+.rec-ready-stats { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; color: #9db8d8; font-family: Consolas, monospace; font-size: 13px; }
+.rec-ready-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+/* 录制中：屏幕上只保留一个暂停按钮 */
+.rec-pause-btn {
+  position: absolute; top: 12px; right: 14px; z-index: 28;
+  padding: 6px 16px; border-radius: 999px;
+  background: rgba(20, 32, 52, 0.62); border: 1px solid rgba(110, 195, 255, 0.35);
+}
+html.touch .rec-pause-btn { min-height: 38px; }
+
+/* 暂停面板：不铺满全屏，右侧小面板，游戏区仍可点音符删除 */
+.rec-pause-panel {
+  position: absolute; top: 58px; right: 14px; z-index: 27;
+  width: min(370px, 92vw); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.rec-pause-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.rec-pause-head b { font-size: 15px; color: #cfe6ff; }
+.rec-pause-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rec-pause-tip { line-height: 1.55; }
+
+/* 暂停后自动出现的时间轴（拖动定位 / 点标记删除） */
+.rec-timeline-wrap {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px;
+  z-index: 26; width: min(760px, 92vw); display: flex; flex-direction: column; gap: 5px;
+}
+.rec-timeline { padding: 4px 9px; cursor: pointer; touch-action: none; user-select: none; }
+.rec-timeline canvas { display: block; touch-action: none; user-select: none; }
+.rec-timeline-hint { padding: 0 4px; line-height: 1.4; }
+
+/* 录制设置弹窗（慢放 / 吸附 / 撤销 / 重录 / 清尾） */
+.rec-settings { width: min(560px, 94vw); }
+.rec-settings-grid { display: flex; flex-direction: column; gap: 18px; }
+.rec-settings-grid section {
+  border-top: 1px solid rgba(110, 195, 255, 0.1); padding-top: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.rec-settings-grid h3 { font-size: 14.5px; color: #cfe6ff; }
+.rec-tool-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
 html.mobile .rec-start { padding: 18px 20px; }
+html.mobile .rec-ready { padding: 20px 22px; }
+html.mobile .rec-pause-panel { top: 52px; right: 10px; padding: 12px 13px; width: min(330px, 94vw); }
+html.mobile .rec-timeline-wrap { bottom: 8px; width: 94vw; }
+html.mobile .rec-settings { padding: 14px 16px; }
 html.mobile .custom-section { padding: 0 14px 4px; }
 
 /* ---------- 触屏与延迟校准页 ---------- */

@@ -76,3 +76,111 @@ export function bytesToText(u8) {
   if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
   return s;
 }
+
+// ---------- 最小 ZIP 写出器（零依赖，v1.8.1 导出 .osz 谱面包） ----------
+// 仅使用 STORE(method=0)：谱面包内音频通常已压缩，再 DEFLATE 收益很小，
+// 同时避免引入压缩实现。文件名按 UTF-8 写入并置通用标志位 11。
+
+const DOS_TIME = 0;         // 00:00:00
+const DOS_DATE = 0x21;      // 1980-01-01，ZIP 可表示的最早日期
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(u8) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) crc = CRC32_TABLE[(crc ^ u8[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+/**
+ * 生成标准 ZIP（仅 STORE）。
+ * @param {Array<{name:string,data:Uint8Array}>} files
+ * @returns {Uint8Array}
+ */
+export function zipStore(files) {
+  const entries = Array.isArray(files) ? files : [];
+  if (entries.length > 0xFFFF) throw new Error('文件数量过多，无法写入 zip');
+  const encoder = new TextEncoder();
+  const locals = [];
+  const centrals = [];
+  let localOffset = 0;
+
+  for (const file of entries) {
+    const name = String(file && file.name != null ? file.name : '');
+    if (!name) throw new Error('zip 文件名不能为空');
+    const nameB = encoder.encode(name);
+    if (nameB.length > 0xFFFF) throw new Error('zip 文件名过长');
+    const data = file.data instanceof Uint8Array
+      ? file.data
+      : new Uint8Array(file.data instanceof ArrayBuffer ? file.data : (file.data || []));
+    if (data.length > 0xFFFFFFFF) throw new Error('zip 文件过大');
+    const crc = crc32(data);
+
+    // local file header: 30 B + name + data
+    const lh = new Uint8Array(30 + nameB.length);
+    const lv = new DataView(lh.buffer);
+    lv.setUint32(0, 0x04034B50, true);
+    lv.setUint16(4, 20, true);              // version needed
+    lv.setUint16(6, 0x0800, true);          // general purpose flag: UTF-8
+    lv.setUint16(8, 0, true);               // method: STORE
+    lv.setUint16(10, DOS_TIME, true);
+    lv.setUint16(12, DOS_DATE, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true);    // compressed size
+    lv.setUint32(22, data.length, true);    // uncompressed size
+    lv.setUint16(26, nameB.length, true);
+    lv.setUint16(28, 0, true);              // extra length
+    lh.set(nameB, 30);
+    locals.push(lh, data);
+
+    // central directory header: 46 B + name
+    const ch = new Uint8Array(46 + nameB.length);
+    const cv = new DataView(ch.buffer);
+    cv.setUint32(0, 0x02014B50, true);
+    cv.setUint16(4, 20, true);              // version made by
+    cv.setUint16(6, 20, true);              // version needed
+    cv.setUint16(8, 0x0800, true);          // UTF-8
+    cv.setUint16(10, 0, true);              // method: STORE
+    cv.setUint16(12, DOS_TIME, true);
+    cv.setUint16(14, DOS_DATE, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, nameB.length, true);
+    cv.setUint16(30, 0, true);              // extra length
+    cv.setUint16(32, 0, true);              // comment length
+    cv.setUint16(34, 0, true);              // disk number start
+    cv.setUint16(36, 0, true);              // internal attributes
+    cv.setUint32(38, 0, true);              // external attributes
+    cv.setUint32(42, localOffset, true);
+    ch.set(nameB, 46);
+    centrals.push(ch);
+
+    localOffset += lh.length + data.length;
+    if (localOffset > 0xFFFFFFFF) throw new Error('zip 总体积过大');
+  }
+
+  const cdSize = centrals.reduce((sum, c) => sum + c.length, 0);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054B50, true);
+  ev.setUint16(4, 0, true);                 // this disk
+  ev.setUint16(6, 0, true);                 // central directory disk
+  ev.setUint16(8, entries.length, true);    // entries on this disk
+  ev.setUint16(10, entries.length, true);   // total entries
+  ev.setUint32(12, cdSize, true);
+  ev.setUint32(16, localOffset, true);
+  ev.setUint16(20, 0, true);                // comment length
+
+  const out = new Uint8Array(localOffset + cdSize + eocd.length);
+  let p = 0;
+  for (const part of [...locals, ...centrals, eocd]) { out.set(part, p); p += part.length; }
+  return out;
+}

@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { updateSong, loadAudioBlob } from '../core/store.js';
 import { generateChart, PATTERN_LABELS } from '../core/chartgen.js';
 import { randomSeed } from '../core/prng.js';
-import { exportChartJson, exportAnalysisCsv, exportMidi } from '../core/exporters.js';
+import { exportChartJson, exportAnalysisCsv, exportMidi, exportChartPackage } from '../core/exporters.js';
 import { importChartToSong } from '../core/importer.js';
 import { decodeFile, analyzeBuffer } from '../core/audio.js';
 import { DIFF_ORDER, DIFFICULTIES } from '../core/constants.js';
@@ -95,6 +95,16 @@ export default function SongScreen({ state, songId, navigate }) {
       flash('导入失败：' + (e.message || e));
     }
     setImporting(false);
+  }
+
+  /** v1.8.1：导出可交换的 .osz 谱面包（原音频 + 4K chart.osu） */
+  async function exportPack(diffKey, customChart) {
+    try {
+      const r = await exportChartPackage(song, diffKey, customChart);
+      if (!r || !r.canceled) flash('谱面包 (.osz) 已导出');
+    } catch (e) {
+      flash('导出失败：' + (e.message || e));
+    }
   }
 
   /** v1.8.0：升级分析到 v4（人声层/结构层/头尾静音裁剪）。保留原 seed 重生成三档，
@@ -251,6 +261,7 @@ export default function SongScreen({ state, songId, navigate }) {
                   <div className="diff-exports">
                     <button className="btn ghost sm" onClick={async () => { const r = await exportChartJson(song, diff); if (!r.canceled) flash('chart.json 已导出'); }}>导出 chart.json</button>
                     <button className="btn ghost sm" onClick={async () => { const r = await exportMidi(song, diff); if (!r.canceled) flash('MIDI 已导出'); }}>导出 MIDI</button>
+                    <button className="btn ghost sm" onClick={() => exportPack(diff)}>导出谱面包 (.osz)</button>
                   </div>
             </div>
           );
@@ -286,6 +297,7 @@ export default function SongScreen({ state, songId, navigate }) {
                   </div>
                   <div className="diff-exports">
                     <button className="btn ghost sm" onClick={async () => { const r = await exportChartJson(song, null, c); if (!r.canceled) flash('chart.json 已导出'); }}>导出 chart.json</button>
+                    <button className="btn ghost sm" onClick={() => exportPack(null, c)}>导出谱面包 (.osz)</button>
                   </div>
                 </div>
               );
